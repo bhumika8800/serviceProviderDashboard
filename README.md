@@ -6,8 +6,9 @@ and the service catalogue.
 
 ## Features
 
-- **Admin authentication** via Firebase email/password (exchanged for the
-  backend JWT) or by pasting an existing admin JWT.
+- **Admin authentication** with the email and password configured on the
+  backend (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). No Firebase or JWT needed in the
+  dashboard — the API validates HTTP Basic credentials.
 - **Overview dashboard** with user, service, revenue, complaint/query stats and
   a booking-status breakdown.
 - **Bookings** list with status filters, pagination, booking details, and
@@ -33,7 +34,7 @@ src/
   api/          # Endpoint wrappers (auth, admin, bookings, services, users)
   components/   # Layout, modals, toasts, badges, pagination, shared states
   context/      # Auth/session provider
-  lib/          # Axios client, Firebase REST auth, formatting helpers, session
+  lib/          # Axios client, session helpers, formatting helpers
   pages/        # Login, Dashboard, Bookings, Create Booking, Services
   types.ts      # API response and domain types
 ```
@@ -55,7 +56,15 @@ src/
    | Variable | Description |
    | --- | --- |
    | `VITE_API_BASE_URL` | Backend API root, e.g. `http://localhost:3000/api/v1` |
-   | `VITE_FIREBASE_API_KEY` | Firebase Web API key (optional, enables email/password sign-in) |
+
+   The admin email and password are **not** stored in the dashboard
+   environment. Configure them in the backend instead:
+
+   ```bash
+   # inside ServiceProviderBackend/.env
+   ADMIN_EMAIL=admin@example.com
+   ADMIN_PASSWORD=change-this-password
+   ```
 
 3. Start the backend (see `../ServiceProviderBackend/README` or run
    `npm run dev` inside that folder), then start the dashboard:
@@ -68,28 +77,28 @@ src/
 
 ## Admin access
 
-The API only allows users with the `admin` role to call the admin endpoints.
-Create or promote an admin in the backend:
+Sign in with the credentials from the backend environment. On the first
+successful login, the backend automatically creates the admin user if it does
+not exist (or reuses the existing account with that email).
 
-```bash
-# inside ServiceProviderBackend
-npm run make-admin -- admin@example.com
-```
+1. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in
+   `ServiceProviderBackend/.env`.
+2. Restart the backend.
+3. Open the dashboard and sign in with the same email and password.
 
-For **Firebase sign-in**, make sure the same email exists as a Firebase Auth
-user in the project configured on the backend, and add the project's Web API
-key as `VITE_FIREBASE_API_KEY`. The dashboard signs in with Firebase, sends the
-ID token to `POST /auth/verify`, and stores the returned JWT.
+The dashboard sends `Authorization: Basic <base64(email:password)>` with each
+request and keeps the session in `sessionStorage`. The password never leaves
+the backend config; change it there and restart the API to rotate access. Use
+HTTPS in production because Basic credentials are only encoded, not encrypted.
 
-For **access-token sign-in**, paste a valid backend JWT (returned by
-`POST /auth/verify` for an admin account). This is useful for local testing
-without a Firebase web app.
+Existing JWT (Bearer) authentication remains available on the backend for the
+mobile app — the dashboard simply does not use it.
 
 ## API endpoints used
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/verify`, `GET /users/me` |
+| Auth | `GET /users/me` (HTTP Basic) |
 | Overview | `GET /admin/stats`, `GET /admin/bookings` |
 | Bookings | `GET /admin/bookings`, `POST /bookings`, `PATCH /bookings/:id/status` |
 | Services | `GET /services`, `POST /services`, `PATCH /services/:id`, `DELETE /services/:id` |

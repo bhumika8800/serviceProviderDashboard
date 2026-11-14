@@ -8,21 +8,20 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { signInWithEmailPassword } from '../lib/firebase';
 import {
   clearSession,
+  encodeBasicAuth,
+  getBasicAuth,
   getStoredUser,
-  getToken,
   saveSession,
 } from '../lib/session';
-import { getMe, verifyFirebaseToken } from '../api/auth';
+import { getMe } from '../api/auth';
 import type { User } from '../types';
 
 interface AuthContextValue {
   user: User | null;
   isBootstrapping: boolean;
-  loginWithFirebase: (email: string, password: string) => Promise<void>;
-  loginWithToken: (token: string) => Promise<void>;
+  loginWithCredentials: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -31,28 +30,28 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(() =>
-    getToken() ? getStoredUser() : null,
+    getBasicAuth() ? getStoredUser() : null,
   );
-  const [isBootstrapping, setIsBootstrapping] = useState<boolean>(
-    () => Boolean(getToken()),
+  const [isBootstrapping, setIsBootstrapping] = useState<boolean>(() =>
+    Boolean(getBasicAuth()),
   );
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
+    const basicAuth = getBasicAuth();
+    if (!basicAuth) {
       setIsBootstrapping(false);
       return;
     }
 
     let active = true;
-    getMe()
+    getMe(`Basic ${basicAuth}`)
       .then((response) => {
         if (!active) return;
         const currentUser = response.data.user;
         if (currentUser.role !== 'admin') {
           throw new Error('This account does not have admin access.');
         }
-        saveSession(token, currentUser);
+        saveSession(basicAuth, currentUser);
         setUser(currentUser);
       })
       .catch(() => {
@@ -81,40 +80,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('sp:unauthorized', handleUnauthorized);
   }, [queryClient]);
 
-  const loginWithFirebase = useCallback(
+  const loginWithCredentials = useCallback(
     async (email: string, password: string) => {
-      const idToken = await signInWithEmailPassword(email.trim(), password);
-      const response = await verifyFirebaseToken(idToken);
-      const { token, user: currentUser } = response.data;
+      const basicAuth = encodeBasicAuth(email.trim(), password);
+      const response = await getMe(`Basic ${basicAuth}`);
+      const currentUser = response.data.user;
 
       if (currentUser.role !== 'admin') {
         throw new Error('This account does not have admin access.');
       }
 
       queryClient.clear();
-      saveSession(token, currentUser);
+      saveSession(basicAuth, currentUser);
       setUser(currentUser);
     },
     [queryClient],
   );
-
-  const loginWithToken = useCallback(async (token: string) => {
-    const trimmed = token.trim();
-    if (!trimmed) {
-      throw new Error('Paste an admin access token to continue.');
-    }
-
-    const response = await getMe(trimmed);
-    const currentUser = response.data.user;
-
-    if (currentUser.role !== 'admin') {
-      throw new Error('This account does not have admin access.');
-    }
-
-    queryClient.clear();
-    saveSession(trimmed, currentUser);
-    setUser(currentUser);
-  }, [queryClient]);
 
   const logout = useCallback(() => {
     clearSession();
@@ -126,11 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isBootstrapping,
-      loginWithFirebase,
-      loginWithToken,
+      loginWithCredentials,
       logout,
     }),
-    [user, isBootstrapping, loginWithFirebase, loginWithToken, logout],
+    [user, isBootstrapping, loginWithCredentials, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

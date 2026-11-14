@@ -1,14 +1,28 @@
 import type { User } from '../types';
 
-const TOKEN_KEY = 'sp_admin_token';
+const AUTH_KEY = 'sp_admin_auth';
 const USER_KEY = 'sp_admin_user';
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+export function encodeBasicAuth(email: string, password: string): string {
+  const bytes = new TextEncoder().encode(`${email}:${password}`);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+export function getBasicAuth(): string | null {
+  return sessionStorage.getItem(AUTH_KEY);
+}
+
+export function getAuthHeader(): string | null {
+  const basic = getBasicAuth();
+  return basic ? `Basic ${basic}` : null;
 }
 
 export function getStoredUser(): User | null {
-  const raw = localStorage.getItem(USER_KEY);
+  const raw = sessionStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as User;
@@ -17,12 +31,12 @@ export function getStoredUser(): User | null {
   }
 }
 
-export function saveSession(token: string, user: User) {
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+export function saveSession(basicAuth: string, user: User) {
+  sessionStorage.setItem(AUTH_KEY, basicAuth);
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(AUTH_KEY);
+  sessionStorage.removeItem(USER_KEY);
 }

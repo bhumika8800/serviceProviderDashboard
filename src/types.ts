@@ -116,11 +116,6 @@ export interface AdminStats {
   openQueries: number;
 }
 
-export interface AuthPayload {
-  token: string;
-  user: User;
-}
-
 export interface CreateBookingInput {
   serviceId: string;
   addressId: string;
